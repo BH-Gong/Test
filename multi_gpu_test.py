@@ -1,56 +1,40 @@
 import torch
 import time
 
-def bench(device, dtype, N=4096, iters=50):
+def bench(dtype, N=4096, iters=50, device="cuda"):
     if dtype == torch.float64:
         N = 2048
 
-    a = torch.randn(N, N, device=device, dtype=dtype)
-    b = torch.randn(N, N, device=device, dtype=dtype)
+    if dtype in [torch.int8, torch.int32]:
+        a = torch.randint(-5, 5, (N, N), device=device, dtype=dtype)
+        b = torch.randint(-5, 5, (N, N), device=device, dtype=dtype)
+    else:
+        a = torch.randn(N, N, device=device, dtype=dtype)
+        b = torch.randn(N, N, device=device, dtype=dtype)
 
-    # warmup
-    for _ in range(10):
-        torch.matmul(a, b)
-
-    torch.cuda.synchronize(device)
+    torch.cuda.synchronize()
 
     start = time.time()
-
     for _ in range(iters):
         torch.matmul(a, b)
-
-    torch.cuda.synchronize(device)
+    torch.cuda.synchronize()
 
     elapsed = time.time() - start
 
     flops = iters * 2 * (N ** 3)
     tflops = flops / elapsed / 1e12
 
-    return tflops
+    print(f"{dtype} | N={N} | {tflops:.2f} TFLOPS")
 
 
 def main():
-    n_gpus = torch.cuda.device_count()
-    print(f"Detected GPUs: {n_gpus}")
+    bench(torch.float16)
+    bench(torch.bfloat16)
+    bench(torch.float32)
+    bench(torch.float64)
 
-    dtypes = [
-        torch.float16,
-        torch.bfloat16,
-        torch.float32,
-        torch.float64
-    ]
-
-    for gpu_id in range(n_gpus):
-        device = f"cuda:{gpu_id}"
-        print(f"\n===== GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)} =====")
-
-        for dtype in dtypes:
-            try:
-                tflops = bench(device, dtype)
-                print(f"{dtype}: {tflops:.2f} TFLOPS")
-            except Exception as e:
-                print(f"{dtype}: ERROR -> {e}")
-
+    bench(torch.int32)
+    bench(torch.int8)
 
 if __name__ == "__main__":
     main()
